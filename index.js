@@ -21,6 +21,9 @@ function rbush(maxEntries, format) {
 
 rbush.prototype = {
 
+    hashTable: {},
+    epsilon: 0.003,
+
     all: function () {
         return this._all(this.data, []);
     },
@@ -52,6 +55,73 @@ rbush.prototype = {
         }
 
         return result;
+    },
+
+    update: function (item, newLoc) {
+        var node = this.hashTable[item.oid];
+        var parent = node.parent;
+        if (!node) {
+            console.log('error in update');
+            return this;
+        }
+        // handle if no parent (root)
+        // console.log('parent ' + '(' + parent.minX + ', ' + parent.minY + ', ' + parent.maxX + ', ' + parent.maxY + ')')
+        // console.log('node ' + '(' + node.minX + ', ' + node.minY + ', ' + node.maxX + ', ' + node.maxY + ')')
+        // console.log('child ' + '(' + child.minX + ', ' + child.minY + ', ' + child.maxX + ', ' + child.maxY + ')')
+        if (contains(node, newLoc)) {
+            item.minX = newLoc.minX;
+            item.minY = newLoc.minY;
+            item.maxX = newLoc.maxX;
+            item.maxY = newLoc.maxY;
+            return this;
+        }
+        if (!parent) {
+            this.remove(item);
+            this.insert(newLoc);
+            return this;
+        }
+        // enlarge node by epsilon or parent bound, whichever is smaller
+        var eMinX = node.minX, eMaxX = node.maxX;
+        var eMinY = node.minY, eMaxY = node.maxY;
+        if (newLoc.minX < node.minX)
+            eMinX = Math.max(node.minX - this.epsilon, parent.minX);
+        else if (newLoc.minX > node.maxX)
+            eMaxX  = Math.min(node.maxX + this.epsilon, parent.maxX);
+        if (newLoc.minY < node.minY)
+            eMinY = Math.max(node.minY - this.epsilon, parent.minY);
+        else if (newLoc.minY > node.maxY)
+            eMaxY = Math.min(node.maxY + this.epsilon, parent.maxY);
+        var oldMinX = node.minX,
+            oldMinY = node.minY,
+            oldMaxX = node.maxX,
+            oldMaxY = node.maxY;
+        node.minX = eMinX;
+        node.minY = eMinY;
+        node.maxX = eMaxX;
+        node.maxY = eMaxY;
+        if (contains(node, newLoc)) {
+            item.minX = newLoc.minX;
+            item.minY = newLoc.minY;
+            item.maxX = newLoc.maxX;
+            item.maxY = newLoc.maxY;
+            return this;
+        }
+        node.minX = oldMinX;
+        node.minY = oldMinY;
+        node.maxX = oldMaxX;
+        node.maxY = oldMaxY;
+        for (var i = 0; i < parent.children.length; i++) {
+            var currLeaf = parent.children[i];
+            if (contains(currLeaf, newLoc) && currLeaf.children.length < this._maxEntries) {
+                currLeaf.children.push(newLoc);
+                this.hashTable[item.oid] = currLeaf;
+                var oldEntryIdx = node.children.indexOf(item);
+                node.children.splice(oldEntryIdx, 1);
+                return this;
+            }
+        }
+        this.remove(item);
+        this.insert(newLoc);
     },
 
     collides: function (bbox) {
@@ -298,6 +368,17 @@ rbush.prototype = {
         // find the best node for accommodating the item, saving all nodes along the path too
         var node = this._chooseSubtree(bbox, this.data, level, insertPath);
 
+        if (node.leaf) {
+            this.hashTable[item.oid] = node;
+            var nodeIdx = insertPath.indexOf(node);
+            if (nodeIdx == -1) {
+                console.log('error');
+                return this;
+            }
+            if (nodeIdx > 0)
+                node.parent = insertPath[nodeIdx - 1];
+        }
+
         // put the item into the node
         node.children.push(item);
         extend(node, bbox);
@@ -305,7 +386,7 @@ rbush.prototype = {
         // split on node overflow; propagate upwards if necessary
         while (level >= 0) {
             if (insertPath[level].children.length > this._maxEntries) {
-                this._split(insertPath, level);
+                this._split(insertPath, level, item.oid);
                 level--;
             } else break;
         }
@@ -328,6 +409,12 @@ rbush.prototype = {
         var newNode = createNode(node.children.splice(splitIndex, node.children.length - splitIndex));
         newNode.height = node.height;
         newNode.leaf = node.leaf;
+        if (newNode.leaf) {
+            for (var i = 0; i < newNode.children.length; i++) {
+                this.hashTable[newNode.children[i].oid] = newNode;
+            }
+            if (node.parent) newNode.parent = node.parent;
+        }
 
         calcBBox(node, this.toBBox);
         calcBBox(newNode, this.toBBox);
@@ -341,6 +428,8 @@ rbush.prototype = {
         this.data = createNode([node, newNode]);
         this.data.height = node.height + 1;
         this.data.leaf = false;
+        node.parent = this.data;
+        newNode.parent = this.data;
         calcBBox(this.data, this.toBBox);
     },
 

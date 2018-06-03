@@ -36,7 +36,8 @@
     "cov": "istanbul cover test/test.js -x test/test.js",
     "build": "browserify index.js -s rbush -o rbush.js",
     "build-min": "browserify index.js -s rbush | uglifyjs -c warnings=false -m > rbush.min.js",
-    "prepare": "npm run build && npm run build-min"
+    "prepare": "npm run build && npm run build-min",
+    "perf-update": "node ./bench/perf_update.js"
   },
   "files": [
     "rbush.js",
