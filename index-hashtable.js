@@ -21,7 +21,8 @@ function rbush(maxEntries, format) {
 
 rbush.prototype = {
 
-    epsilon: 0.006,
+    hashTable: {},
+    epsilon: 0.003,
 
     all: function () {
         return this._all(this.data, []);
@@ -38,8 +39,6 @@ rbush.prototype = {
         var nodesToSearch = [],
             i, len, child, childBBox;
 
-        var parent;
-
         while (node) {
             for (i = 0, len = node.children.length; i < len; i++) {
 
@@ -47,12 +46,11 @@ rbush.prototype = {
                 childBBox = node.leaf ? toBBox(child) : child;
 
                 if (intersects(bbox, childBBox)) {
-                    if (node.leaf) result.push([parent, node, child]);
+                    if (node.leaf) result.push(child);
                     else if (contains(bbox, childBBox)) this._all(child, result);
                     else nodesToSearch.push(child);
                 }
             }
-            parent = node;
             node = nodesToSearch.pop();
         }
 
@@ -60,20 +58,18 @@ rbush.prototype = {
     },
 
     update: function (item, newLoc) {
-        var result = this.search(item);
-        if (!result) {
-            console.log('error 1 in update');
+        var node = this.hashTable[item.oid];
+        var parent = node.parent;
+        if (!node) {
+            console.log('error in update');
             return this;
         }
-        if (result.length != 1) {
-            console.log('error 2 in update');
-            return this;
-        }
-        var parent = result[0][0],
-            node = result[0][1],
-            child = result[0][2];
-        if (!node || !parent || !child) {
-            return this;
+        var child;
+        for (var i = 0; i < node.children.length; i++) {
+            if (node.children[i] == item) {
+                child = node.children[i];
+                break;
+            }
         }
         // handle if no parent (root)
         // console.log('parent ' + '(' + parent.minX + ', ' + parent.minY + ', ' + parent.maxX + ', ' + parent.maxY + ')')
@@ -86,11 +82,11 @@ rbush.prototype = {
             child.maxY = newLoc.maxY;
             return this;
         }
-        // if (!parent) {
-        //     this.remove(item);
-        //     this.insert(newLoc);
-        //     return this;
-        // }
+        if (!parent) {
+            this.remove(child);
+            this.insert(newLoc);
+            return this;
+        }
         // enlarge node by epsilon or parent bound, whichever is smaller
         var eMinX = node.minX, eMaxX = node.maxX;
         var eMinY = node.minY, eMaxY = node.maxY;
@@ -123,10 +119,10 @@ rbush.prototype = {
         node.maxY = oldMaxY;
         for (var i = 0; i < parent.children.length; i++) {
             var currLeaf = parent.children[i];
-            if (currLeaf.children && contains(currLeaf, newLoc) && currLeaf.children.length < this._maxEntries) {
+            if (contains(currLeaf, newLoc) && currLeaf.children.length < this._maxEntries) {
                 currLeaf.children.push(newLoc);
-                //this.hashTable[item.oid] = currLeaf;
-                var oldEntryIdx = node.children.indexOf(child);
+                this.hashTable[item.oid] = currLeaf;
+                var oldEntryIdx = node.children.indexOf(item);
                 node.children.splice(oldEntryIdx, 1);
                 return this;
             }
@@ -380,7 +376,7 @@ rbush.prototype = {
         var node = this._chooseSubtree(bbox, this.data, level, insertPath);
 
         if (node.leaf) {
-            //this.hashTable[item.oid] = node;
+            this.hashTable[item.oid] = node;
             var nodeIdx = insertPath.indexOf(node);
             if (nodeIdx == -1) {
                 console.log('error');
@@ -420,12 +416,12 @@ rbush.prototype = {
         var newNode = createNode(node.children.splice(splitIndex, node.children.length - splitIndex));
         newNode.height = node.height;
         newNode.leaf = node.leaf;
-        // if (newNode.leaf) {
-        //     for (var i = 0; i < newNode.children.length; i++) {
-        //         this.hashTable[newNode.children[i].oid] = newNode;
-        //     }
-        //     if (node.parent) newNode.parent = node.parent;
-        // }
+        if (newNode.leaf) {
+            for (var i = 0; i < newNode.children.length; i++) {
+                this.hashTable[newNode.children[i].oid] = newNode;
+            }
+            if (node.parent) newNode.parent = node.parent;
+        }
 
         calcBBox(node, this.toBBox);
         calcBBox(newNode, this.toBBox);

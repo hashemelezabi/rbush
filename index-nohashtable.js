@@ -21,7 +21,7 @@ function rbush(maxEntries, format) {
 
 rbush.prototype = {
 
-    epsilon: 0.006,
+    epsilon: 0.003,
 
     all: function () {
         return this._all(this.data, []);
@@ -60,19 +60,16 @@ rbush.prototype = {
     },
 
     update: function (item, newLoc) {
-        var result = this.search(item);
-        if (!result) {
-            console.log('error 1 in update');
-            return this;
-        }
+        var result = this.search[item];
         if (result.length != 1) {
-            console.log('error 2 in update');
+            console.log('error in update');
             return this;
         }
         var parent = result[0][0],
             node = result[0][1],
             child = result[0][2];
         if (!node || !parent || !child) {
+            console.log('error in update');
             return this;
         }
         // handle if no parent (root)
@@ -123,7 +120,7 @@ rbush.prototype = {
         node.maxY = oldMaxY;
         for (var i = 0; i < parent.children.length; i++) {
             var currLeaf = parent.children[i];
-            if (currLeaf.children && contains(currLeaf, newLoc) && currLeaf.children.length < this._maxEntries) {
+            if (contains(currLeaf, newLoc) && currLeaf.children.length < this._maxEntries) {
                 currLeaf.children.push(newLoc);
                 //this.hashTable[item.oid] = currLeaf;
                 var oldEntryIdx = node.children.indexOf(child);
